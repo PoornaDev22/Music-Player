@@ -8,26 +8,34 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
-import android.widget.ImageButton
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 class MainActivity : AppCompatActivity() {
-
     private lateinit var recyclerView: RecyclerView
     private val songList = mutableListOf<Song>()
     private var currentSongIndex = 0
+    private lateinit var playlistManager: PlaylistManager
+
+    // Tab buttons
+    private lateinit var btnAllAudio: Button
+    private lateinit var btnPlaylists: Button
+
+    // Current view state
+    private var currentView = "all_audio" // or "playlists"
 
     // 🎵 Mini Player Views
     private lateinit var miniPlayer: View
@@ -100,6 +108,12 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
+        playlistManager = PlaylistManager(this)
+
+        // Tab buttons
+        btnAllAudio = findViewById(R.id.btnAllAudio)
+        btnPlaylists = findViewById(R.id.btnPlaylists)
+
         // 🎵 Mini Player init
         miniPlayer = findViewById(R.id.miniPlayer)
         miniSongTitle = findViewById(R.id.miniSongTitle)
@@ -113,9 +127,54 @@ class MainActivity : AppCompatActivity() {
             openFullPlayer()
         }
 
+        // Setup tab button click listeners
+        btnAllAudio.setOnClickListener {
+            showAllAudioView()
+        }
+
+        btnPlaylists.setOnClickListener {
+            showPlaylistsView()
+        }
+
         setupMiniPlayerControls()
         checkPermission()
         checkNotificationPermission()
+
+        // Show all audio by default
+        showAllAudioView()
+    }
+
+    private fun showAllAudioView() {
+        currentView = "all_audio"
+        btnAllAudio.isEnabled = false
+        btnPlaylists.isEnabled = true
+
+        // Load and show all songs
+        loadSongs()
+    }
+
+    private fun showPlaylistsView() {
+        currentView = "playlists"
+        btnAllAudio.isEnabled = true
+        btnPlaylists.isEnabled = false
+
+        // Load and show playlists with menu
+        val playlists = playlistManager.getAllPlaylists()
+        recyclerView.adapter = PlaylistAdapterWithMenu(playlists,
+            onClick = { playlistId ->
+                openPlaylistSongs(playlistId)
+            },
+            onMenuClick = { playlistId ->
+                showPlaylistOptionsDialog(playlistId)
+            }
+        )
+    }
+
+    private fun openPlaylistSongs(playlistId: Int) {
+        val intent = Intent(this, PlaylistSongsActivity::class.java).apply {
+            putExtra(PlaylistSongsActivity.EXTRA_PLAYLIST_ID, playlistId)
+        }
+        startActivity(intent)
     }
 
     @Suppress("UnspecifiedRegisterReceiverFlag")
@@ -129,6 +188,12 @@ class MainActivity : AppCompatActivity() {
             registerReceiver(musicUpdateReceiver, filter)
         }
         Log.d("MainActivity", "BroadcastReceiver registered")
+
+        // Refresh current view
+        when (currentView) {
+            "all_audio" -> showAllAudioView()
+            "playlists" -> showPlaylistsView()
+        }
     }
 
     override fun onPause() {
@@ -190,6 +255,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             permissionLauncher.launch(permission)
         } else {
+            checkNotificationPermission()
             loadSongs()
         }
     }
@@ -244,9 +310,125 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        recyclerView.adapter = SongAdapter(songList) { position ->
-            playSong(position)
+        recyclerView.adapter = SongAdapterWithMenu(songList,
+            onSongClick = { position ->
+                playSong(position)
+            },
+            onMenuClick = { position ->
+                showPlaylistDialog(position)
+            }
+        )
+    }
+
+    private fun showPlaylistDialog(position: Int) {
+        if (position < 0 || position >= songList.size) return
+
+        val song = songList[position]
+        val allPlaylists = playlistManager.getAllPlaylists()
+
+        val playlistNames = allPlaylists.map { it.name }.toMutableList()
+        playlistNames.add("Create new playlist...")
+
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_playlist, null)
+        val playlistListView = dialogView.findViewById<ListView>(R.id.playlistListView)
+        val newPlaylistEditText = dialogView.findViewById<EditText>(R.id.newPlaylistEditText)
+
+        // Create adapter with custom layout for highlighting
+        val adapter = ArrayAdapter(this, R.layout.dialog_playlist_item, playlistNames)
+        playlistListView.adapter = adapter
+        playlistListView.choiceMode = ListView.CHOICE_MODE_SINGLE
+
+        var selectedPlaylistId = -1
+        var selectedPosition = -1
+
+        playlistListView.setOnItemClickListener { _, _, pos, _ ->
+            // Update the selected position for highlighting
+            selectedPosition = pos
+
+            if (pos == allPlaylists.size) {
+                // "Create new playlist..." selected
+                newPlaylistEditText.visibility = View.VISIBLE
+                newPlaylistEditText.requestFocus()
+                selectedPlaylistId = -1
+            } else {
+                // Existing playlist selected
+                selectedPlaylistId = allPlaylists[pos].id
+                newPlaylistEditText.visibility = View.GONE
+            }
+
+            // Force update of views to show selection
+            adapter.notifyDataSetChanged()
         }
+
+        AlertDialog.Builder(this)
+            .setTitle("Add to Playlist")
+            .setView(dialogView)
+            .setPositiveButton("Add") { _, _ ->
+                if (selectedPlaylistId != -1) {
+                    // Add to existing playlist
+                    playlistManager.addSongToPlaylist(selectedPlaylistId, song.uri, song.title)
+                    val playlist = playlistManager.getPlaylist(selectedPlaylistId)
+                    Toast.makeText(this, "Added to playlist: ${playlist?.name}", Toast.LENGTH_SHORT).show()
+                } else if (newPlaylistEditText.text.toString().isNotBlank()) {
+                    // Create new playlist and add song
+                    val playlistName = newPlaylistEditText.text.toString()
+                    val newPlaylist = playlistManager.createPlaylist(playlistName)
+                    playlistManager.addSongToPlaylist(newPlaylist.id, song.uri, song.title)
+                    Toast.makeText(this, "Added to new playlist: $playlistName", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showPlaylistOptionsDialog(playlistId: Int) {
+        val playlist = playlistManager.getPlaylist(playlistId) ?: return
+        val options = arrayOf("Rename", "Delete")
+
+        AlertDialog.Builder(this)
+            .setTitle("Playlist Options")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showRenamePlaylistDialog(playlistId, playlist.name)
+                    1 -> showDeletePlaylistDialog(playlistId, playlist.name)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRenamePlaylistDialog(playlistId: Int, currentName: String) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_rename_playlist, null)
+        val editText = dialogView.findViewById<EditText>(R.id.editText)
+        editText.setText(currentName)
+        editText.setSelection(currentName.length)
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename Playlist")
+            .setView(dialogView)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = editText.text.toString().trim()
+                if (newName.isNotBlank()) {
+                    playlistManager.renamePlaylist(playlistId, newName)
+                    showPlaylistsView() // Refresh the list
+                    Toast.makeText(this, "Playlist renamed", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showDeletePlaylistDialog(playlistId: Int, playlistName: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete Playlist")
+            .setMessage("Are you sure you want to delete '$playlistName'?")
+            .setPositiveButton("Delete") { _, _ ->
+                playlistManager.deletePlaylist(playlistId)
+                showPlaylistsView() // Refresh the list
+                Toast.makeText(this, "Playlist deleted", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun openFullPlayer() {

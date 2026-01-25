@@ -31,7 +31,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -39,6 +38,11 @@
         <!-- PlayerActivity - Full screen music player -->
         <activity
             android:name=".PlayerActivity"
+            android:exported="false" />
+
+        <!-- PlaylistSongsActivity - Shows songs in a playlist -->
+        <activity
+            android:name=".PlaylistSongsActivity"
             android:exported="false" />
 
         <service

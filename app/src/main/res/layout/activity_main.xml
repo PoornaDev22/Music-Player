@@ -23,12 +23,43 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Song List -->
+    <!-- Tab Buttons -->
+    <LinearLayout
+        android:id="@+id/tabBar"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_below="@id/headerBar"
+        android:orientation="horizontal"
+        android:background="#EEEEEE">
+
+        <Button
+            android:id="@+id/btnAllAudio"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="All Audio"
+            android:textAllCaps="false"
+            android:background="@android:color/transparent"
+            android:textColor="#000000"/>
+
+        <Button
+            android:id="@+id/btnPlaylists"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Playlists"
+            android:textAllCaps="false"
+            android:background="@android:color/transparent"
+            android:textColor="#000000"/>
+
+    </LinearLayout>
+
+    <!-- Song List / Playlist List -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/headerBar"
+        android:layout_below="@id/tabBar"
         android:layout_above="@id/miniPlayer"
         android:padding="4dp"/>
 
