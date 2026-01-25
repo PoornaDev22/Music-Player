@@ -83,13 +83,45 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Extra Controls (Shuffle and Repeat) -->
+    <LinearLayout
+        android:id="@+id/extraControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/progressSection"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/btnShuffle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_sort_by_size"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"/>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"/>
+
+        <ImageButton
+            android:id="@+id/btnRepeat"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_repeat_one_off"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"/>
+    </LinearLayout>
+
     <!-- Control Buttons -->
     <LinearLayout
         android:id="@+id/controlButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/progressSection"
-        android:layout_marginTop="40dp"
+        android:layout_below="@id/extraControls"
+        android:layout_marginTop="20dp"
         android:orientation="horizontal"
         android:gravity="center">
 

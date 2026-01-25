@@ -27,10 +27,14 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnNext: ImageButton
     private lateinit var btnPrev: ImageButton
     private lateinit var btnBack: ImageButton
+    private lateinit var btnShuffle: ImageButton
+    private lateinit var btnRepeat: ImageButton
 
     private var songList: List<Song> = emptyList()
     private var currentIndex = 0
     private var isPlaying = false
+    private var isShuffleEnabled = false
+    private var isRepeatOneEnabled = false
     private var duration = 0
     private var currentPosition = 0
 
@@ -43,11 +47,15 @@ class PlayerActivity : AppCompatActivity() {
                 MusicService.ACTION_UPDATE_UI -> {
                     isPlaying = intent.getBooleanExtra(MusicService.EXTRA_IS_PLAYING, false)
                     currentIndex = intent.getIntExtra(MusicService.EXTRA_SONG_INDEX, 0)
+                    isShuffleEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_SHUFFLE, false)
+                    isRepeatOneEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_REPEAT_ONE, false)
                     updateUI()
                 }
                 MusicService.ACTION_UPDATE_PROGRESS -> {
                     currentPosition = intent.getIntExtra(MusicService.EXTRA_CURRENT_POSITION, 0)
                     duration = intent.getIntExtra(MusicService.EXTRA_DURATION, 0)
+                    isShuffleEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_SHUFFLE, false)
+                    isRepeatOneEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_REPEAT_ONE, false)
                     updateProgress()
                 }
             }
@@ -68,8 +76,10 @@ class PlayerActivity : AppCompatActivity() {
         btnNext = findViewById(R.id.btnNext)
         btnPrev = findViewById(R.id.btnPrev)
         btnBack = findViewById(R.id.btnBack)
+        btnShuffle = findViewById(R.id.btnShuffle)
+        btnRepeat = findViewById(R.id.btnRepeat)
 
-        // Get data from intent
+        // Get data from intent (if any)
         songList = intent.getParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST) ?: emptyList()
         currentIndex = intent.getIntExtra(MusicService.EXTRA_SONG_INDEX, 0)
         isPlaying = intent.getBooleanExtra(MusicService.EXTRA_IS_PLAYING, false)
@@ -133,6 +143,20 @@ class PlayerActivity : AppCompatActivity() {
             startService(intent)
         }
 
+        btnShuffle.setOnClickListener {
+            val intent = Intent(this, MusicService::class.java).apply {
+                action = MusicService.ACTION_SHUFFLE
+            }
+            startService(intent)
+        }
+
+        btnRepeat.setOnClickListener {
+            val intent = Intent(this, MusicService::class.java).apply {
+                action = MusicService.ACTION_REPEAT_ONE
+            }
+            startService(intent)
+        }
+
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -155,19 +179,30 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        if (currentIndex >= 0 && currentIndex < songList.size) {
-            songTitle.text = songList[currentIndex].title
-            songTitle.isSelected = true // Enable marquee scrolling
+        // Player will get song info from service broadcasts
+        // We don't need to set song title from intent anymore
+        songTitle.isSelected = true // Enable marquee scrolling
 
-            // Update play/pause button
-            btnPlayPause.setImageResource(
-                if (isPlaying) android.R.drawable.ic_media_pause
-                else android.R.drawable.ic_media_play
-            )
+        // Update play/pause button
+        btnPlayPause.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        )
 
-            // Set default album art (you can enhance this to load actual album art)
-            albumArt.setImageResource(R.drawable.ic_music_note)
-        }
+        // Update shuffle button
+        btnShuffle.setImageResource(
+            if (isShuffleEnabled) R.drawable.ic_shuffle_on
+            else R.drawable.ic_shuffle
+        )
+
+        // Update repeat button
+        btnRepeat.setImageResource(
+            if (isRepeatOneEnabled) R.drawable.ic_repeat_one_on
+            else R.drawable.ic_repeat_one_off
+        )
+
+        // Set default album art
+        albumArt.setImageResource(R.drawable.ic_music_note)
     }
 
     private fun updateProgress() {

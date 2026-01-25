@@ -12,24 +12,13 @@
         android:layout_height="70dp"
         android:layout_alignParentTop="true"
         android:background="#000000"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp">
-
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@android:drawable/ic_menu_revert"
-            android:background="@android:color/transparent"
-            app:tint="#FFFFFF"/>
+        android:gravity="center"
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/playlistTitle"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="16dp"
             android:text="Playlist"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
@@ -38,12 +27,101 @@
             android:ellipsize="end"/>
     </LinearLayout>
 
+    <!-- Control Buttons Row -->
+    <LinearLayout
+        android:id="@+id/controlButtonsRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/headerBar"
+        android:background="#EEEEEE"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="16dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:background="@android:color/transparent"
+            android:contentDescription="Back"/>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"/>
+
+        <ImageButton
+            android:id="@+id/btnShuffle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="16dp"
+            android:src="@drawable/ic_shuffle"
+            android:background="@android:color/transparent"
+            android:contentDescription="Shuffle playlist"/>
+    </LinearLayout>
+
     <!-- Song List -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/headerBar"
+        android:layout_below="@id/controlButtonsRow"
+        android:layout_above="@id/miniPlayer"
         android:padding="4dp"/>
+
+    <!-- Mini Player Bar -->
+    <LinearLayout
+        android:id="@+id/miniPlayer"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#EEEEEE"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/miniSongTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Song Name"
+            android:textSize="14sp"
+            android:textColor="#000000"
+            android:ellipsize="end"
+            android:maxLines="1"/>
+
+        <ImageButton
+            android:id="@+id/btnPrev"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_media_previous"
+            android:background="@android:color/transparent"/>
+
+        <ImageButton
+            android:id="@+id/btnPlayPause"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_media_play"
+            android:background="@android:color/transparent"/>
+
+        <ImageButton
+            android:id="@+id/btnNext"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_media_next"
+            android:background="@android:color/transparent"/>
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="@android:color/transparent"
+            android:contentDescription="Close player"/>
+    </LinearLayout>
 
 </RelativeLayout>

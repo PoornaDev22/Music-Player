@@ -5,4 +5,9 @@
     <string name="add_to_playlist">Add to Playlist</string>
     <string name="create_new_playlist">Create New Playlist</string>
     <string name="existing_playlists">Existing Playlists</string>
+    <string name="song_options">Song Options</string>
+    <string name="play_on_repeat">Play on Repeat</string>
+    <string name="shuffle_from_here">Shuffle from Here</string>
+    <string name="playing_on_repeat">Playing on repeat</string>
+    <string name="shuffle_enabled">Shuffle enabled</string>
 </resources>

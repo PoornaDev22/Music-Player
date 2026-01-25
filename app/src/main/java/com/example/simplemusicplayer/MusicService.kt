@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.content.pm.PackageManager
+import kotlin.random.Random
 
 class MusicService : Service() {
 
@@ -25,6 +26,12 @@ class MusicService : Service() {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var progressUpdateRunnable: Runnable? = null
 
+    // Shuffle and repeat states
+    private var isShuffleEnabled = false
+    private var isRepeatOneEnabled = false
+    private var shuffleOrder: MutableList<Int> = mutableListOf()
+    private var originalOrder: MutableList<Int> = mutableListOf()
+
     companion object {
         const val CHANNEL_ID = "MusicPlayerChannel"
         const val NOTIFICATION_ID = 1
@@ -32,6 +39,8 @@ class MusicService : Service() {
         const val ACTION_TOGGLE = "ACTION_TOGGLE"
         const val ACTION_NEXT = "ACTION_NEXT"
         const val ACTION_PREVIOUS = "ACTION_PREVIOUS"
+        const val ACTION_SHUFFLE = "ACTION_SHUFFLE"
+        const val ACTION_REPEAT_ONE = "ACTION_REPEAT_ONE"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_PROGRESS = "ACTION_UPDATE_PROGRESS"
         const val ACTION_SEEK = "ACTION_SEEK"
@@ -42,6 +51,9 @@ class MusicService : Service() {
         const val EXTRA_CURRENT_POSITION = "EXTRA_CURRENT_POSITION"
         const val EXTRA_DURATION = "EXTRA_DURATION"
         const val EXTRA_SEEK_POSITION = "EXTRA_SEEK_POSITION"
+        const val EXTRA_IS_SHUFFLE = "EXTRA_IS_SHUFFLE"
+        const val EXTRA_IS_REPEAT_ONE = "EXTRA_IS_REPEAT_ONE"
+        const val EXTRA_SONG_TITLE = "EXTRA_SONG_TITLE"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -61,6 +73,7 @@ class MusicService : Service() {
                 if (songs != null) {
                     songList = songs
                     currentIndex = index
+                    initializePlayOrder()
                     playSong(currentIndex)
                 }
             }
@@ -83,13 +96,27 @@ class MusicService : Service() {
             }
             ACTION_NEXT -> {
                 if (songList.isNotEmpty()) {
-                    playSong((currentIndex + 1) % songList.size)
+                    playNextSong()
                 }
             }
             ACTION_PREVIOUS -> {
                 if (songList.isNotEmpty()) {
-                    playSong((currentIndex - 1 + songList.size) % songList.size)
+                    playPreviousSong()
                 }
+            }
+            ACTION_SHUFFLE -> {
+                isShuffleEnabled = !isShuffleEnabled
+                if (isShuffleEnabled) {
+                    generateShuffleOrder()
+                    currentIndex = shuffleOrder.indexOf(currentIndex)
+                } else {
+                    currentIndex = originalOrder[currentIndex]
+                }
+                updateUI(mediaPlayer?.isPlaying ?: false)
+            }
+            ACTION_REPEAT_ONE -> {
+                isRepeatOneEnabled = !isRepeatOneEnabled
+                updateUI(mediaPlayer?.isPlaying ?: false)
             }
             ACTION_SEEK -> {
                 val position = intent.getIntExtra(EXTRA_SEEK_POSITION, 0)
@@ -107,12 +134,38 @@ class MusicService : Service() {
         return START_STICKY
     }
 
+    private fun initializePlayOrder() {
+        originalOrder = songList.indices.toMutableList()
+        shuffleOrder = originalOrder.toMutableList()
+    }
+
+    private fun generateShuffleOrder() {
+        shuffleOrder = songList.indices.toMutableList()
+        shuffleOrder.shuffle()
+        // Ensure current song stays in position if it's playing
+        if (mediaPlayer?.isPlaying == true) {
+            val currentInShuffle = shuffleOrder.indexOf(currentIndex)
+            if (currentInShuffle != -1) {
+                shuffleOrder.removeAt(currentInShuffle)
+                shuffleOrder.add(0, currentIndex)
+            }
+        }
+    }
+
     private fun playSong(index: Int) {
-        if (index < 0 || index >= songList.size) return
+        if (songList.isEmpty()) return
+
+        val actualIndex = if (isShuffleEnabled) {
+            shuffleOrder.getOrNull(index) ?: return
+        } else {
+            index
+        }
+
+        if (actualIndex < 0 || actualIndex >= songList.size) return
         currentIndex = index
 
         mediaPlayer?.release()
-        val song = songList[index]
+        val song = songList[actualIndex]
 
         try {
             mediaPlayer = MediaPlayer().apply {
@@ -120,18 +173,42 @@ class MusicService : Service() {
                 prepare()
                 start()
                 setOnCompletionListener {
-                    playSong((currentIndex + 1) % songList.size)
+                    if (isRepeatOneEnabled) {
+                        // Repeat the same song
+                        playSong(currentIndex)
+                    } else {
+                        // Play next song
+                        playNextSong()
+                    }
                 }
             }
 
-            Log.d("MusicService", "Started playing: ${song.title}")
+            Log.d("MusicService", "Started playing: ${song.title}, shuffle: $isShuffleEnabled, repeat: $isRepeatOneEnabled")
             updateUI(true)
             updateNotification(true)
             startProgressUpdates()
         } catch (e: Exception) {
             Log.e("MusicService", "Error playing song", e)
             e.printStackTrace()
+            // Try to play next song if current fails
+            if (!isRepeatOneEnabled) {
+                playNextSong()
+            }
         }
+    }
+
+    private fun playNextSong() {
+        if (songList.isEmpty()) return
+
+        val nextIndex = (currentIndex + 1) % songList.size
+        playSong(nextIndex)
+    }
+
+    private fun playPreviousSong() {
+        if (songList.isEmpty()) return
+
+        val prevIndex = if (currentIndex - 1 < 0) songList.size - 1 else currentIndex - 1
+        playSong(prevIndex)
     }
 
     private fun startProgressUpdates() {
@@ -156,6 +233,8 @@ class MusicService : Service() {
             val intent = Intent(ACTION_UPDATE_PROGRESS).apply {
                 putExtra(EXTRA_CURRENT_POSITION, it.currentPosition)
                 putExtra(EXTRA_DURATION, it.duration)
+                putExtra(EXTRA_IS_SHUFFLE, isShuffleEnabled)
+                putExtra(EXTRA_IS_REPEAT_ONE, isRepeatOneEnabled)
             }
             sendBroadcast(intent)
         }
@@ -165,9 +244,15 @@ class MusicService : Service() {
         val intent = Intent(ACTION_UPDATE_UI).apply {
             putExtra(EXTRA_IS_PLAYING, isPlaying)
             putExtra(EXTRA_SONG_INDEX, currentIndex)
+            putExtra(EXTRA_IS_SHUFFLE, isShuffleEnabled)
+            putExtra(EXTRA_IS_REPEAT_ONE, isRepeatOneEnabled)
+            // Add song title to the broadcast
+            if (currentIndex >= 0 && currentIndex < songList.size) {
+                putExtra(EXTRA_SONG_TITLE, songList[currentIndex].title)
+            }
         }
         sendBroadcast(intent)
-        Log.d("MusicService", "Sent broadcast: isPlaying=$isPlaying")
+        Log.d("MusicService", "Sent broadcast: isPlaying=$isPlaying, shuffle=$isShuffleEnabled, repeat=$isRepeatOneEnabled")
     }
 
     private fun createNotificationChannel() {
@@ -229,6 +314,28 @@ class MusicService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Create intent for Shuffle action
+        val shuffleIntent = Intent(this, MusicService::class.java).apply {
+            action = ACTION_SHUFFLE
+        }
+        val shufflePendingIntent = PendingIntent.getService(
+            this,
+            4,
+            shuffleIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Create intent for Repeat action
+        val repeatIntent = Intent(this, MusicService::class.java).apply {
+            action = ACTION_REPEAT_ONE
+        }
+        val repeatPendingIntent = PendingIntent.getService(
+            this,
+            5,
+            repeatIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Music Player")
             .setContentText(title)
@@ -251,6 +358,16 @@ class MusicService : Service() {
                 android.R.drawable.ic_media_next,
                 "Next",
                 nextPendingIntent
+            )
+            .addAction(
+                if (isShuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle,
+                "Shuffle",
+                shufflePendingIntent
+            )
+            .addAction(
+                if (isRepeatOneEnabled) R.drawable.ic_repeat_one_on else R.drawable.ic_repeat_one_off,
+                "Repeat",
+                repeatPendingIntent
             )
             .build()
 
