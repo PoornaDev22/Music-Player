@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPlayPause: ImageButton
     private lateinit var btnNext: ImageButton
     private lateinit var btnPrev: ImageButton
+    private lateinit var btnClose: ImageButton
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -105,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         btnPlayPause = findViewById(R.id.btnPlayPause)
         btnNext = findViewById(R.id.btnNext)
         btnPrev = findViewById(R.id.btnPrev)
+        btnClose = findViewById(R.id.btnClose)
 
         setupMiniPlayerControls()
         checkPermission()
@@ -158,6 +160,16 @@ class MainActivity : AppCompatActivity() {
                 action = MusicService.ACTION_PREVIOUS
             }
             startService(intent)
+        }
+
+        btnClose.setOnClickListener {
+            Log.d("MainActivity", "Close clicked")
+            // Hide the mini player
+            miniPlayer.visibility = View.GONE
+
+            // Stop the music service
+            val intent = Intent(this, MusicService::class.java)
+            stopService(intent)
         }
     }
 

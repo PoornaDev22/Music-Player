@@ -75,6 +75,14 @@
             android:layout_height="40dp"
             android:src="@android:drawable/ic_media_next"
             android:background="@android:color/transparent"/>
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="@android:color/transparent"
+            android:contentDescription="Close player"/>
     </LinearLayout>
 
 </RelativeLayout>
