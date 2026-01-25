@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:padding="16dp">
+
+    <!-- Album Art -->
+    <ImageView
+        android:id="@+id/albumArt"
+        android:layout_width="300dp"
+        android:layout_height="300dp"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="150dp"
+        android:src="@drawable/ic_music_note"
+        android:scaleType="centerCrop"
+        android:background="#EEEEEE"
+        android:contentDescription="Album Art"/>
+
+    <!-- Song Title -->
+    <TextView
+        android:id="@+id/songTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/albumArt"
+        android:layout_marginTop="32dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Song Title"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="#000000"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit="marquee_forever"
+        android:singleLine="true"
+        android:scrollHorizontally="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"/>
+
+    <!-- Progress Section -->
+    <LinearLayout
+        android:id="@+id/progressSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/songTitle"
+        android:layout_marginTop="40dp"
+        android:orientation="vertical">
+
+        <!-- Seek Bar -->
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="0"/>
+
+        <!-- Time Display -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/currentTime"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0:00"
+                android:textSize="12sp"
+                android:textColor="#666666"/>
+
+            <TextView
+                android:id="@+id/totalTime"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0:00"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:gravity="end"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Control Buttons -->
+    <LinearLayout
+        android:id="@+id/controlButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/progressSection"
+        android:layout_marginTop="40dp"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/btnPrev"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@android:drawable/ic_media_previous"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"/>
+
+        <ImageButton
+            android:id="@+id/btnPlayPause"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginHorizontal="32dp"
+            android:src="@android:drawable/ic_media_play"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"/>
+
+        <ImageButton
+            android:id="@+id/btnNext"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@android:drawable/ic_media_next"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"/>
+    </LinearLayout>
+
+    <!-- Back Button at Bottom -->
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="16dp"
+        android:src="@android:drawable/ic_menu_revert"
+        android:background="@android:color/transparent"
+        android:contentDescription="Back"/>
+
+</RelativeLayout>

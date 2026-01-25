@@ -22,6 +22,8 @@ class MusicService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var songList: List<Song> = emptyList()
     private var currentIndex = 0
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var progressUpdateRunnable: Runnable? = null
 
     companion object {
         const val CHANNEL_ID = "MusicPlayerChannel"
@@ -31,9 +33,15 @@ class MusicService : Service() {
         const val ACTION_NEXT = "ACTION_NEXT"
         const val ACTION_PREVIOUS = "ACTION_PREVIOUS"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
+        const val ACTION_UPDATE_PROGRESS = "ACTION_UPDATE_PROGRESS"
+        const val ACTION_SEEK = "ACTION_SEEK"
+        const val ACTION_GET_STATE = "ACTION_GET_STATE"
         const val EXTRA_SONG_LIST = "EXTRA_SONG_LIST"
         const val EXTRA_SONG_INDEX = "EXTRA_SONG_INDEX"
         const val EXTRA_IS_PLAYING = "EXTRA_IS_PLAYING"
+        const val EXTRA_CURRENT_POSITION = "EXTRA_CURRENT_POSITION"
+        const val EXTRA_DURATION = "EXTRA_DURATION"
+        const val EXTRA_SEEK_POSITION = "EXTRA_SEEK_POSITION"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -60,11 +68,13 @@ class MusicService : Service() {
                 mediaPlayer?.let {
                     if (it.isPlaying) {
                         it.pause()
+                        stopProgressUpdates()
                         Log.d("MusicService", "Paused playback")
                         updateUI(false)
                         updateNotification(false)
                     } else {
                         it.start()
+                        startProgressUpdates()
                         Log.d("MusicService", "Resumed playback")
                         updateUI(true)
                         updateNotification(true)
@@ -79,6 +89,18 @@ class MusicService : Service() {
             ACTION_PREVIOUS -> {
                 if (songList.isNotEmpty()) {
                     playSong((currentIndex - 1 + songList.size) % songList.size)
+                }
+            }
+            ACTION_SEEK -> {
+                val position = intent.getIntExtra(EXTRA_SEEK_POSITION, 0)
+                mediaPlayer?.seekTo(position)
+                updateProgressBroadcast()
+            }
+            ACTION_GET_STATE -> {
+                // Send current state to activity
+                mediaPlayer?.let {
+                    updateUI(it.isPlaying)
+                    updateProgressBroadcast()
                 }
             }
         }
@@ -105,9 +127,37 @@ class MusicService : Service() {
             Log.d("MusicService", "Started playing: ${song.title}")
             updateUI(true)
             updateNotification(true)
+            startProgressUpdates()
         } catch (e: Exception) {
             Log.e("MusicService", "Error playing song", e)
             e.printStackTrace()
+        }
+    }
+
+    private fun startProgressUpdates() {
+        stopProgressUpdates()
+        progressUpdateRunnable = object : Runnable {
+            override fun run() {
+                updateProgressBroadcast()
+                handler.postDelayed(this, 1000) // Update every second
+            }
+        }
+        handler.post(progressUpdateRunnable!!)
+    }
+
+    private fun stopProgressUpdates() {
+        progressUpdateRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+    }
+
+    private fun updateProgressBroadcast() {
+        mediaPlayer?.let {
+            val intent = Intent(ACTION_UPDATE_PROGRESS).apply {
+                putExtra(EXTRA_CURRENT_POSITION, it.currentPosition)
+                putExtra(EXTRA_DURATION, it.duration)
+            }
+            sendBroadcast(intent)
         }
     }
 
@@ -202,10 +252,6 @@ class MusicService : Service() {
                 "Next",
                 nextPendingIntent
             )
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
             .build()
 
         // Only post notification if permission granted (Android 13+)
@@ -222,6 +268,7 @@ class MusicService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopProgressUpdates()
         mediaPlayer?.release()
         mediaPlayer = null
     }

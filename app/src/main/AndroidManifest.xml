@@ -25,6 +25,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SimpleMusicPlayer"
         tools:targetApi="31">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -34,6 +35,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- PlayerActivity - Full screen music player -->
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false" />
+
         <service
             android:name=".MusicService"
             android:foregroundServiceType="mediaPlayback"

@@ -108,6 +108,11 @@ class MainActivity : AppCompatActivity() {
         btnPrev = findViewById(R.id.btnPrev)
         btnClose = findViewById(R.id.btnClose)
 
+        // Open full player when mini player is clicked
+        miniPlayer.setOnClickListener {
+            openFullPlayer()
+        }
+
         setupMiniPlayerControls()
         checkPermission()
         checkNotificationPermission()
@@ -242,5 +247,17 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter = SongAdapter(songList) { position ->
             playSong(position)
         }
+    }
+
+    private fun openFullPlayer() {
+        val intent = Intent(this, PlayerActivity::class.java).apply {
+            putParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST, ArrayList(songList))
+            putExtra(MusicService.EXTRA_SONG_INDEX, currentSongIndex)
+            // Check if the current icon is pause (meaning it's playing)
+            val isPlaying = btnPlayPause.drawable?.constantState ==
+                    ContextCompat.getDrawable(this@MainActivity, android.R.drawable.ic_media_pause)?.constantState
+            putExtra(MusicService.EXTRA_IS_PLAYING, isPlaying)
+        }
+        startActivity(intent)
     }
 }
