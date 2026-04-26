@@ -49,6 +49,14 @@ class PlayerActivity : AppCompatActivity() {
                     currentIndex = intent.getIntExtra(MusicService.EXTRA_SONG_INDEX, 0)
                     isShuffleEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_SHUFFLE, false)
                     isRepeatOneEnabled = intent.getBooleanExtra(MusicService.EXTRA_IS_REPEAT_ONE, false)
+
+                    // Read the song title the service already resolves correctly
+                    // (accounting for shuffle order). This is what was missing before.
+                    val title = intent.getStringExtra(MusicService.EXTRA_SONG_TITLE)
+                    if (!title.isNullOrEmpty()) {
+                        songTitle.text = title
+                    }
+
                     updateUI()
                 }
                 MusicService.ACTION_UPDATE_PROGRESS -> {
@@ -66,7 +74,6 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
-        // Initialize views
         albumArt = findViewById(R.id.albumArt)
         songTitle = findViewById(R.id.songTitle)
         currentTime = findViewById(R.id.currentTime)
@@ -79,10 +86,16 @@ class PlayerActivity : AppCompatActivity() {
         btnShuffle = findViewById(R.id.btnShuffle)
         btnRepeat = findViewById(R.id.btnRepeat)
 
-        // Get data from intent (if any)
         songList = intent.getParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST) ?: emptyList()
         currentIndex = intent.getIntExtra(MusicService.EXTRA_SONG_INDEX, 0)
         isPlaying = intent.getBooleanExtra(MusicService.EXTRA_IS_PLAYING, false)
+
+        // Show the title immediately from the intent's song list while we wait
+        // for the service broadcast to confirm the real (shuffle-aware) title.
+        songTitle.isSelected = true // enable marquee scrolling
+        if (songList.isNotEmpty() && currentIndex in songList.indices) {
+            songTitle.text = songList[currentIndex].title
+        }
 
         setupControls()
         updateUI()
@@ -101,7 +114,8 @@ class PlayerActivity : AppCompatActivity() {
             registerReceiver(musicUpdateReceiver, filter)
         }
 
-        // Request current state from service
+        // Ask the service for its current state; it will broadcast ACTION_UPDATE_UI
+        // which carries the correct title (already shuffle-aware from our MusicService fix).
         val intent = Intent(this, MusicService::class.java).apply {
             action = MusicService.ACTION_GET_STATE
         }
@@ -118,90 +132,68 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
-        btnBack.setOnClickListener {
-            finish()
-        }
+        btnBack.setOnClickListener { finish() }
 
         btnPlayPause.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_TOGGLE
-            }
-            startService(intent)
+            })
         }
 
         btnNext.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_NEXT
-            }
-            startService(intent)
+            })
         }
 
         btnPrev.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_PREVIOUS
-            }
-            startService(intent)
+            })
         }
 
         btnShuffle.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_SHUFFLE
-            }
-            startService(intent)
+            })
         }
 
         btnRepeat.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_REPEAT_ONE
-            }
-            startService(intent)
+            })
         }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    currentTime.text = formatTime(progress)
-                }
+                if (fromUser) currentTime.text = formatTime(progress)
             }
-
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 seekBar?.let {
-                    val intent = Intent(this@PlayerActivity, MusicService::class.java).apply {
+                    startService(Intent(this@PlayerActivity, MusicService::class.java).apply {
                         action = MusicService.ACTION_SEEK
                         putExtra(MusicService.EXTRA_SEEK_POSITION, it.progress)
-                    }
-                    startService(intent)
+                    })
                 }
             }
         })
     }
 
     private fun updateUI() {
-        // Player will get song info from service broadcasts
-        // We don't need to set song title from intent anymore
-        songTitle.isSelected = true // Enable marquee scrolling
+        // songTitle.text is set by the broadcast receiver — don't overwrite it here.
+        songTitle.isSelected = true // keep marquee scrolling active
 
-        // Update play/pause button
         btnPlayPause.setImageResource(
             if (isPlaying) android.R.drawable.ic_media_pause
             else android.R.drawable.ic_media_play
         )
-
-        // Update shuffle button
         btnShuffle.setImageResource(
-            if (isShuffleEnabled) R.drawable.ic_shuffle_on
-            else R.drawable.ic_shuffle
+            if (isShuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle
         )
-
-        // Update repeat button
         btnRepeat.setImageResource(
-            if (isRepeatOneEnabled) R.drawable.ic_repeat_one_on
-            else R.drawable.ic_repeat_one_off
+            if (isRepeatOneEnabled) R.drawable.ic_repeat_one_on else R.drawable.ic_repeat_one_off
         )
-
-        // Set default album art
         albumArt.setImageResource(R.drawable.ic_music_note)
     }
 
@@ -216,11 +208,7 @@ class PlayerActivity : AppCompatActivity() {
         val seconds = (milliseconds / 1000) % 60
         val minutes = (milliseconds / (1000 * 60)) % 60
         val hours = (milliseconds / (1000 * 60 * 60))
-
-        return if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            String.format("%d:%02d", minutes, seconds)
-        }
+        return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
+        else String.format("%d:%02d", minutes, seconds)
     }
 }

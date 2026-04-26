@@ -1,11 +1,9 @@
 package com.example.simplemusicplayer
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
@@ -16,21 +14,23 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.content.pm.PackageManager
-import kotlin.random.Random
 
 class MusicService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var songList: List<Song> = emptyList()
+
+    // currentIndex is always a POSITION in the current play order.
+    // When shuffle is OFF: play order is [0,1,...,n-1], so position == song index.
+    // When shuffle is ON:  play order is shuffleOrder[], so songIndex = shuffleOrder[position].
     private var currentIndex = 0
+
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var progressUpdateRunnable: Runnable? = null
 
-    // Shuffle and repeat states
     private var isShuffleEnabled = false
     private var isRepeatOneEnabled = false
     private var shuffleOrder: MutableList<Int> = mutableListOf()
-    private var originalOrder: MutableList<Int> = mutableListOf()
 
     companion object {
         const val CHANNEL_ID = "MusicPlayerChannel"
@@ -69,11 +69,12 @@ class MusicService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_SONG_LIST)
-                val index = intent.getIntExtra(EXTRA_SONG_INDEX, 0)
+                val songIndex = intent.getIntExtra(EXTRA_SONG_INDEX, 0)
                 if (songs != null) {
                     songList = songs
-                    currentIndex = index
-                    initializePlayOrder()
+                    // Build the play order, respecting whatever shuffle state is already set.
+                    // This fixes the bug where initializePlayOrder() always reset to sequential.
+                    initializePlayOrder(songIndex)
                     playSong(currentIndex)
                 }
             }
@@ -82,35 +83,33 @@ class MusicService : Service() {
                     if (it.isPlaying) {
                         it.pause()
                         stopProgressUpdates()
-                        Log.d("MusicService", "Paused playback")
                         updateUI(false)
                         updateNotification(false)
                     } else {
                         it.start()
                         startProgressUpdates()
-                        Log.d("MusicService", "Resumed playback")
                         updateUI(true)
                         updateNotification(true)
                     }
                 }
             }
             ACTION_NEXT -> {
-                if (songList.isNotEmpty()) {
-                    playNextSong()
-                }
+                if (songList.isNotEmpty()) playNextSong()
             }
             ACTION_PREVIOUS -> {
-                if (songList.isNotEmpty()) {
-                    playPreviousSong()
-                }
+                if (songList.isNotEmpty()) playPreviousSong()
             }
             ACTION_SHUFFLE -> {
                 isShuffleEnabled = !isShuffleEnabled
                 if (isShuffleEnabled) {
-                    generateShuffleOrder()
-                    currentIndex = shuffleOrder.indexOf(currentIndex)
+                    // currentIndex is currently a plain song index (shuffle was off).
+                    // Build a new random order with the current song pinned to position 0.
+                    buildShuffleOrderFrom(songIndex = currentIndex)
+                    currentIndex = 0
                 } else {
-                    currentIndex = originalOrder[currentIndex]
+                    // currentIndex is a position in shuffleOrder.
+                    // Convert back to the actual song index so sequential play stays coherent.
+                    currentIndex = shuffleOrder[currentIndex]
                 }
                 updateUI(mediaPlayer?.isPlaying ?: false)
             }
@@ -124,7 +123,6 @@ class MusicService : Service() {
                 updateProgressBroadcast()
             }
             ACTION_GET_STATE -> {
-                // Send current state to activity
                 mediaPlayer?.let {
                     updateUI(it.isPlaying)
                     updateProgressBroadcast()
@@ -134,35 +132,46 @@ class MusicService : Service() {
         return START_STICKY
     }
 
-    private fun initializePlayOrder() {
-        originalOrder = songList.indices.toMutableList()
-        shuffleOrder = originalOrder.toMutableList()
-    }
-
-    private fun generateShuffleOrder() {
-        shuffleOrder = songList.indices.toMutableList()
-        shuffleOrder.shuffle()
-        // Ensure current song stays in position if it's playing
-        if (mediaPlayer?.isPlaying == true) {
-            val currentInShuffle = shuffleOrder.indexOf(currentIndex)
-            if (currentInShuffle != -1) {
-                shuffleOrder.removeAt(currentInShuffle)
-                shuffleOrder.add(0, currentIndex)
-            }
+    // Returns the actual song index for the current playback position.
+    // This is the single source of truth used by playSong, updateUI, and updateNotification.
+    private fun getActualSongIndex(): Int {
+        return if (isShuffleEnabled) {
+            shuffleOrder.getOrElse(currentIndex) { 0 }
+        } else {
+            currentIndex
         }
     }
 
-    private fun playSong(index: Int) {
+    // Sets up the play order for a new song list.
+    // If shuffle is OFF: currentIndex = songIndex (position == song index).
+    // If shuffle is ON:  build a randomized order, pin songIndex at position 0,
+    //                    so currentIndex = 0 and the right song plays first.
+    private fun initializePlayOrder(songIndex: Int) {
+        if (isShuffleEnabled) {
+            buildShuffleOrderFrom(songIndex)
+            currentIndex = 0
+        } else {
+            // Sequential — position and song index are the same thing.
+            currentIndex = songIndex
+        }
+    }
+
+    // Builds a fully randomized shuffleOrder with `songIndex` pinned at position 0.
+    private fun buildShuffleOrderFrom(songIndex: Int) {
+        shuffleOrder = songList.indices.toMutableList()
+        shuffleOrder.remove(songIndex)   // pull the current song out
+        shuffleOrder.shuffle()           // randomize the rest
+        shuffleOrder.add(0, songIndex)   // put the current song first
+    }
+
+    // Plays the song at the given POSITION in the current play order.
+    private fun playSong(position: Int) {
         if (songList.isEmpty()) return
 
-        val actualIndex = if (isShuffleEnabled) {
-            shuffleOrder.getOrNull(index) ?: return
-        } else {
-            index
-        }
+        currentIndex = position
+        val actualIndex = getActualSongIndex()
 
         if (actualIndex < 0 || actualIndex >= songList.size) return
-        currentIndex = index
 
         mediaPlayer?.release()
         val song = songList[actualIndex]
@@ -174,41 +183,33 @@ class MusicService : Service() {
                 start()
                 setOnCompletionListener {
                     if (isRepeatOneEnabled) {
-                        // Repeat the same song
                         playSong(currentIndex)
                     } else {
-                        // Play next song
                         playNextSong()
                     }
                 }
             }
 
-            Log.d("MusicService", "Started playing: ${song.title}, shuffle: $isShuffleEnabled, repeat: $isRepeatOneEnabled")
+            Log.d("MusicService", "Playing [pos=$currentIndex, song=$actualIndex]: ${song.title} | shuffle=$isShuffleEnabled repeat=$isRepeatOneEnabled")
             updateUI(true)
             updateNotification(true)
             startProgressUpdates()
         } catch (e: Exception) {
             Log.e("MusicService", "Error playing song", e)
-            e.printStackTrace()
-            // Try to play next song if current fails
-            if (!isRepeatOneEnabled) {
-                playNextSong()
-            }
+            if (!isRepeatOneEnabled) playNextSong()
         }
     }
 
     private fun playNextSong() {
         if (songList.isEmpty()) return
-
-        val nextIndex = (currentIndex + 1) % songList.size
-        playSong(nextIndex)
+        val nextPosition = (currentIndex + 1) % songList.size
+        playSong(nextPosition)
     }
 
     private fun playPreviousSong() {
         if (songList.isEmpty()) return
-
-        val prevIndex = if (currentIndex - 1 < 0) songList.size - 1 else currentIndex - 1
-        playSong(prevIndex)
+        val prevPosition = if (currentIndex - 1 < 0) songList.size - 1 else currentIndex - 1
+        playSong(prevPosition)
     }
 
     private fun startProgressUpdates() {
@@ -216,16 +217,14 @@ class MusicService : Service() {
         progressUpdateRunnable = object : Runnable {
             override fun run() {
                 updateProgressBroadcast()
-                handler.postDelayed(this, 1000) // Update every second
+                handler.postDelayed(this, 1000)
             }
         }
         handler.post(progressUpdateRunnable!!)
     }
 
     private fun stopProgressUpdates() {
-        progressUpdateRunnable?.let {
-            handler.removeCallbacks(it)
-        }
+        progressUpdateRunnable?.let { handler.removeCallbacks(it) }
     }
 
     private fun updateProgressBroadcast() {
@@ -241,18 +240,19 @@ class MusicService : Service() {
     }
 
     private fun updateUI(isPlaying: Boolean) {
+        val actualIndex = getActualSongIndex()
         val intent = Intent(ACTION_UPDATE_UI).apply {
             putExtra(EXTRA_IS_PLAYING, isPlaying)
             putExtra(EXTRA_SONG_INDEX, currentIndex)
             putExtra(EXTRA_IS_SHUFFLE, isShuffleEnabled)
             putExtra(EXTRA_IS_REPEAT_ONE, isRepeatOneEnabled)
-            // Add song title to the broadcast
-            if (currentIndex >= 0 && currentIndex < songList.size) {
-                putExtra(EXTRA_SONG_TITLE, songList[currentIndex].title)
+            // Use the real song index for the title, not the position index.
+            if (actualIndex >= 0 && actualIndex < songList.size) {
+                putExtra(EXTRA_SONG_TITLE, songList[actualIndex].title)
             }
         }
         sendBroadcast(intent)
-        Log.d("MusicService", "Sent broadcast: isPlaying=$isPlaying, shuffle=$isShuffleEnabled, repeat=$isRepeatOneEnabled")
+        Log.d("MusicService", "updateUI: isPlaying=$isPlaying shuffle=$isShuffleEnabled repeat=$isRepeatOneEnabled")
     }
 
     private fun createNotificationChannel() {
@@ -261,80 +261,28 @@ class MusicService : Service() {
                 CHANNEL_ID,
                 "Music Player",
                 NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Music Player Controls"
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            ).apply { description = "Music Player Controls" }
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 
     private fun updateNotification(isPlaying: Boolean) {
-        val title = songList.getOrNull(currentIndex)?.title ?: "Playing Music"
+        // Use the real song index, not the play-order position.
+        val actualIndex = getActualSongIndex()
+        val title = songList.getOrNull(actualIndex)?.title ?: "Playing Music"
 
-        // Create intent to open the app
-        val openAppIntent = Intent(this, MainActivity::class.java)
         val openAppPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
+            this, 0,
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Create intent for Previous action
-        val prevIntent = Intent(this, MusicService::class.java).apply {
-            action = ACTION_PREVIOUS
-        }
-        val prevPendingIntent = PendingIntent.getService(
-            this,
-            1,
-            prevIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Create intent for Play/Pause action
-        val toggleIntent = Intent(this, MusicService::class.java).apply {
-            action = ACTION_TOGGLE
-        }
-        val togglePendingIntent = PendingIntent.getService(
-            this,
-            2,
-            toggleIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Create intent for Next action
-        val nextIntent = Intent(this, MusicService::class.java).apply {
-            action = ACTION_NEXT
-        }
-        val nextPendingIntent = PendingIntent.getService(
-            this,
-            3,
-            nextIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Create intent for Shuffle action
-        val shuffleIntent = Intent(this, MusicService::class.java).apply {
-            action = ACTION_SHUFFLE
-        }
-        val shufflePendingIntent = PendingIntent.getService(
-            this,
-            4,
-            shuffleIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Create intent for Repeat action
-        val repeatIntent = Intent(this, MusicService::class.java).apply {
-            action = ACTION_REPEAT_ONE
-        }
-        val repeatPendingIntent = PendingIntent.getService(
-            this,
-            5,
-            repeatIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        fun servicePendingIntent(requestCode: Int, action: String) =
+            PendingIntent.getService(
+                this, requestCode,
+                Intent(this, MusicService::class.java).apply { this.action = action },
+                PendingIntent.FLAG_IMMUTABLE
+            )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Music Player")
@@ -343,44 +291,30 @@ class MusicService : Service() {
             .setContentIntent(openAppPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            // Add notification action buttons
-            .addAction(
-                android.R.drawable.ic_media_previous,
-                "Previous",
-                prevPendingIntent
-            )
+            .addAction(android.R.drawable.ic_media_previous, "Previous", servicePendingIntent(1, ACTION_PREVIOUS))
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 if (isPlaying) "Pause" else "Play",
-                togglePendingIntent
+                servicePendingIntent(2, ACTION_TOGGLE)
             )
-            .addAction(
-                android.R.drawable.ic_media_next,
-                "Next",
-                nextPendingIntent
-            )
+            .addAction(android.R.drawable.ic_media_next, "Next", servicePendingIntent(3, ACTION_NEXT))
             .addAction(
                 if (isShuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle,
                 "Shuffle",
-                shufflePendingIntent
+                servicePendingIntent(4, ACTION_SHUFFLE)
             )
             .addAction(
                 if (isRepeatOneEnabled) R.drawable.ic_repeat_one_on else R.drawable.ic_repeat_one_off,
                 "Repeat",
-                repeatPendingIntent
+                servicePendingIntent(5, ACTION_REPEAT_ONE)
             )
             .build()
 
-        // Only post notification if permission granted (Android 13+)
         val canPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
 
-        if (canPost) {
-            startForeground(NOTIFICATION_ID, notification)
-        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        if (canPost) startForeground(NOTIFICATION_ID, notification)
     }
 
     override fun onDestroy() {
