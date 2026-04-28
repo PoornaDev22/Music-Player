@@ -52,16 +52,69 @@
             android:background="@android:color/transparent"
             android:textColor="#000000"/>
 
+        <Button
+            android:id="@+id/btnOnline"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Online"
+            android:textAllCaps="false"
+            android:background="@android:color/transparent"
+            android:textColor="#000000"/>
+
     </LinearLayout>
 
-    <!-- Song List / Playlist List -->
+    <!-- Shuffle bar — shown on All Audio tab only.
+         Online tab has its own shuffle button inside the fragment.
+         GONE on Playlists so it takes no space. -->
+    <LinearLayout
+        android:id="@+id/shuffleBar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_below="@id/tabBar"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:background="#F5F5F5"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_shuffle"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btnShuffleAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shuffle All"
+            android:textAllCaps="false"
+            android:background="@android:color/transparent"
+            android:textColor="#000000"
+            android:textStyle="bold"
+            android:padding="0dp"/>
+
+    </LinearLayout>
+
+    <!-- Local songs / playlists list -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/tabBar"
+        android:layout_below="@id/shuffleBar"
         android:layout_above="@id/miniPlayer"
         android:padding="4dp"/>
+
+    <!-- Online songs fragment container -->
+    <FrameLayout
+        android:id="@+id/fragmentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/shuffleBar"
+        android:layout_above="@id/miniPlayer"
+        android:visibility="gone"/>
 
     <!-- Mini Player Bar -->
     <LinearLayout

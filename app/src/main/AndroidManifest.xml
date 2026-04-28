@@ -15,6 +15,9 @@
     <!-- For permission for post notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Required for Firestore and streaming audio from Cloudinary -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -49,6 +52,7 @@
             android:name=".MusicService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="false"/>
+
     </application>
 
 </manifest>

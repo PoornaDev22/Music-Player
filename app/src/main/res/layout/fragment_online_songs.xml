@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Shuffle bar — matches the same bar in the All Audio tab -->
+    <LinearLayout
+        android:id="@+id/onlineShuffleBar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_alignParentTop="true"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:background="#F5F5F5">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_shuffle"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btnOnlineShuffleAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shuffle All"
+            android:textAllCaps="false"
+            android:background="@android:color/transparent"
+            android:textColor="#000000"
+            android:textStyle="bold"
+            android:padding="0dp"/>
+
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/onlineProgressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/onlineEmptyText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="No online songs found"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/onlineRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/onlineShuffleBar"/>
+
+</RelativeLayout>

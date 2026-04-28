@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("kotlin-parcelize")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -45,5 +46,12 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.media:media:1.7.0")
     implementation ("com.google.code.gson:gson:2.10.1")
+    // Firebase BOM - manages all Firebase library versions automatically
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
 
+    // Firestore - stores song metadata (title, artist, url, etc.)
+    implementation("com.google.firebase:firebase-firestore")
+
+    // Storage - stores the actual .mp3 files
+    implementation("com.google.firebase:firebase-storage")
 }

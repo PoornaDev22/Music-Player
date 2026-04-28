@@ -33,11 +33,18 @@ class MainActivity : AppCompatActivity() {
     // Tab buttons
     private lateinit var btnAllAudio: Button
     private lateinit var btnPlaylists: Button
+    private lateinit var btnOnline: Button
 
-    // Current view state
-    private var currentView = "all_audio" // or "playlists"
+    // Shuffle bar (All Audio tab only)
+    private lateinit var shuffleBar: View
+    private lateinit var btnShuffleAll: Button
 
-    // 🎵 Mini Player Views
+    // Fragment container for the Online tab
+    private lateinit var fragmentContainer: FrameLayout
+
+    private var currentView = "all_audio"
+
+    // Mini Player Views
     private lateinit var miniPlayer: View
     private lateinit var miniSongTitle: TextView
     private lateinit var btnPlayPause: ImageButton
@@ -53,21 +60,15 @@ class MainActivity : AppCompatActivity() {
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (!granted) {
-                Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
-            }
+            if (!granted) Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
         }
 
-    // Broadcast receiver to update UI based on service state
     private val musicUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.d("MainActivity", "Broadcast received: ${intent?.action}")
-
             when (intent?.action) {
                 MusicService.ACTION_UPDATE_UI -> {
                     val isPlaying = intent.getBooleanExtra(MusicService.EXTRA_IS_PLAYING, false)
                     val songTitle = intent.getStringExtra(MusicService.EXTRA_SONG_TITLE)
-
                     updateMiniPlayer(isPlaying, songTitle)
                 }
             }
@@ -77,36 +78,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateMiniPlayer(isPlaying: Boolean, songTitle: String?) {
         if (isPlaying) {
             miniPlayer.visibility = View.VISIBLE
-
-            // Use song title from broadcast if available
-            if (!songTitle.isNullOrEmpty()) {
-                miniSongTitle.text = songTitle
-            } else {
-                miniSongTitle.text = "Now Playing"
-            }
-
-            // Update play/pause button icon
-            val iconRes = if (isPlaying) {
-                android.R.drawable.ic_media_pause
-            } else {
-                android.R.drawable.ic_media_play
-            }
-            btnPlayPause.setImageResource(iconRes)
-            Log.d("MainActivity", "Set icon to: ${if (isPlaying) "PAUSE" else "PLAY"}")
+            miniSongTitle.text = if (!songTitle.isNullOrEmpty()) songTitle else "Now Playing"
+            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
         } else {
             miniPlayer.visibility = View.GONE
-        }
-    }
-
-    private fun checkNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
     }
 
@@ -116,14 +91,14 @@ class MainActivity : AppCompatActivity() {
 
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
-
         playlistManager = PlaylistManager(this)
 
-        // Tab buttons
         btnAllAudio = findViewById(R.id.btnAllAudio)
         btnPlaylists = findViewById(R.id.btnPlaylists)
-
-        // 🎵 Mini Player init
+        btnOnline = findViewById(R.id.btnOnline)
+        shuffleBar = findViewById(R.id.shuffleBar)
+        btnShuffleAll = findViewById(R.id.btnShuffleAll)
+        fragmentContainer = findViewById(R.id.fragmentContainer)
         miniPlayer = findViewById(R.id.miniPlayer)
         miniSongTitle = findViewById(R.id.miniSongTitle)
         btnPlayPause = findViewById(R.id.btnPlayPause)
@@ -131,25 +106,27 @@ class MainActivity : AppCompatActivity() {
         btnPrev = findViewById(R.id.btnPrev)
         btnClose = findViewById(R.id.btnClose)
 
-        // Open full player when mini player is clicked
-        miniPlayer.setOnClickListener {
-            openFullPlayer()
-        }
+        miniPlayer.setOnClickListener { openFullPlayer() }
+        btnAllAudio.setOnClickListener { showAllAudioView() }
+        btnPlaylists.setOnClickListener { showPlaylistsView() }
+        btnOnline.setOnClickListener { showOnlineView() }
 
-        // Setup tab button click listeners
-        btnAllAudio.setOnClickListener {
-            showAllAudioView()
-        }
-
-        btnPlaylists.setOnClickListener {
-            showPlaylistsView()
+        // Shuffle all local songs — picks a random start, plays with shuffle on
+        btnShuffleAll.setOnClickListener {
+            if (songList.isNotEmpty()) {
+                val randomIndex = (0 until songList.size).random()
+                val intent = Intent(this, MusicService::class.java).apply {
+                    action = MusicService.ACTION_START_SHUFFLED
+                    putParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST, ArrayList(songList))
+                    putExtra(MusicService.EXTRA_SONG_INDEX, randomIndex)
+                }
+                ContextCompat.startForegroundService(this, intent)
+            }
         }
 
         setupMiniPlayerControls()
         checkPermission()
         checkNotificationPermission()
-
-        // Show all audio by default
         showAllAudioView()
     }
 
@@ -157,8 +134,12 @@ class MainActivity : AppCompatActivity() {
         currentView = "all_audio"
         btnAllAudio.isEnabled = false
         btnPlaylists.isEnabled = true
+        btnOnline.isEnabled = true
 
-        // Load and show all songs
+        recyclerView.visibility = View.VISIBLE
+        fragmentContainer.visibility = View.GONE
+        shuffleBar.visibility = View.VISIBLE   // show shuffle bar for All Audio
+
         loadSongs()
     }
 
@@ -166,11 +147,32 @@ class MainActivity : AppCompatActivity() {
         currentView = "playlists"
         btnAllAudio.isEnabled = true
         btnPlaylists.isEnabled = false
+        btnOnline.isEnabled = true
 
-        // Load and show playlists
+        recyclerView.visibility = View.VISIBLE
+        fragmentContainer.visibility = View.GONE
+        shuffleBar.visibility = View.GONE      // no shuffle bar for Playlists
+
         val playlists = playlistManager.getAllPlaylists()
         recyclerView.adapter = PlaylistAdapter(playlists) { playlistId ->
             openPlaylistSongs(playlistId)
+        }
+    }
+
+    private fun showOnlineView() {
+        currentView = "online"
+        btnAllAudio.isEnabled = true
+        btnPlaylists.isEnabled = true
+        btnOnline.isEnabled = false
+
+        recyclerView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+        shuffleBar.visibility = View.GONE      // Online fragment has its own shuffle button
+
+        if (supportFragmentManager.findFragmentById(R.id.fragmentContainer) == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, OnlineSongsFragment())
+                .commit()
         }
     }
 
@@ -184,88 +186,56 @@ class MainActivity : AppCompatActivity() {
     @Suppress("UnspecifiedRegisterReceiverFlag")
     override fun onResume() {
         super.onResume()
-        // Register broadcast receiver when activity is visible
         val filter = IntentFilter(MusicService.ACTION_UPDATE_UI)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(musicUpdateReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             registerReceiver(musicUpdateReceiver, filter)
         }
-        Log.d("MainActivity", "BroadcastReceiver registered")
-
-        // Check if music is playing when activity resumes
-        checkMusicPlayingState()
-
-        // Refresh current view
+        startService(Intent(this, MusicService::class.java).apply {
+            action = MusicService.ACTION_GET_STATE
+        })
         when (currentView) {
             "all_audio" -> showAllAudioView()
             "playlists" -> showPlaylistsView()
+            "online" -> showOnlineView()
         }
-    }
-
-    private fun checkMusicPlayingState() {
-        // Ask service for current state
-        val intent = Intent(this, MusicService::class.java).apply {
-            action = MusicService.ACTION_GET_STATE
-        }
-        startService(intent)
     }
 
     override fun onPause() {
         super.onPause()
-        // Unregister when activity is not visible
-        try {
-            unregisterReceiver(musicUpdateReceiver)
-            Log.d("MainActivity", "BroadcastReceiver unregistered")
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error unregistering receiver", e)
-        }
+        try { unregisterReceiver(musicUpdateReceiver) } catch (e: Exception) { }
     }
 
     private fun setupMiniPlayerControls() {
         btnPlayPause.setOnClickListener {
-            Log.d("MainActivity", "Play/Pause clicked")
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_TOGGLE
-            }
-            startService(intent)
+            })
         }
-
         btnNext.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_NEXT
-            }
-            startService(intent)
+            })
         }
-
         btnPrev.setOnClickListener {
-            val intent = Intent(this, MusicService::class.java).apply {
+            startService(Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_PREVIOUS
-            }
-            startService(intent)
+            })
         }
-
         btnClose.setOnClickListener {
-            Log.d("MainActivity", "Close clicked")
-            // Hide the mini player
             miniPlayer.visibility = View.GONE
-
-            // Stop the music service
-            val intent = Intent(this, MusicService::class.java)
-            stopService(intent)
+            stopService(Intent(this, MusicService::class.java))
         }
     }
 
     private fun checkPermission() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             Manifest.permission.READ_MEDIA_AUDIO
-        } else {
+        else
             Manifest.permission.READ_EXTERNAL_STORAGE
-        }
 
-        if (ContextCompat.checkSelfPermission(this, permission)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
             permissionLauncher.launch(permission)
         } else {
             checkNotificationPermission()
@@ -273,92 +243,66 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     private fun playSong(index: Int) {
         if (index < 0 || index >= songList.size) return
-
         currentSongIndex = index
-
-        // 🎵 Update Mini Player UI
         miniPlayer.visibility = View.VISIBLE
         miniSongTitle.text = songList[index].title
         btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
-
-        // Start the service for the selected song
-        val intent = Intent(this, MusicService::class.java).apply {
+        ContextCompat.startForegroundService(this, Intent(this, MusicService::class.java).apply {
             action = MusicService.ACTION_START
             putParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST, ArrayList(songList))
             putExtra(MusicService.EXTRA_SONG_INDEX, index)
-        }
-
-        ContextCompat.startForegroundService(this, intent)
+        })
     }
 
     private fun loadSongs() {
         songList.clear()
-
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE
-        )
-
+        val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE)
         val cursor: Cursor? = contentResolver.query(
-            uri,
-            projection,
-            null,
-            null,
-            MediaStore.Audio.Media.TITLE + " ASC"
+            uri, projection, null, null, MediaStore.Audio.Media.TITLE + " ASC"
         )
-
         cursor?.use {
             val idIndex = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleIndex = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-
             while (it.moveToNext()) {
                 val id = it.getLong(idIndex)
                 val title = it.getString(titleIndex)
                 val contentUri: Uri = ContentUris.withAppendedId(uri, id)
-
                 songList.add(Song(title, contentUri.toString()))
             }
         }
-
         recyclerView.adapter = SongAdapterWithMenu(songList,
-            onSongClick = { position ->
-                playSong(position)
-            },
-            onMenuClick = { position ->
-                showSongOptionsDialog(position)
-            }
+            onSongClick = { position -> playSong(position) },
+            onMenuClick = { position -> showSongOptionsDialog(position) }
         )
     }
 
     private fun showSongOptionsDialog(position: Int) {
         if (position < 0 || position >= songList.size) return
-
         val song = songList[position]
-
-        // Create options for the song menu with icons
         val options = arrayOf("Add to Playlist", "Play on Repeat")
-
-        // Create custom adapter with icons
         val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, options) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val view = super.getView(position, convertView, parent) as TextView
-
-                // Add icons to menu items
                 when (position) {
-                    0 -> view.setCompoundDrawablesWithIntrinsicBounds(
-                        R.drawable.ic_playlist, 0, 0, 0)
-                    1 -> view.setCompoundDrawablesWithIntrinsicBounds(
-                        R.drawable.ic_repeat_menu, 0, 0, 0)
+                    0 -> view.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_playlist, 0, 0, 0)
+                    1 -> view.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_repeat_menu, 0, 0, 0)
                 }
                 view.compoundDrawablePadding = 16
-
                 return view
             }
         }
-
         AlertDialog.Builder(this)
             .setTitle("Song Options")
             .setAdapter(adapter) { _, which ->
@@ -373,56 +317,38 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAddToPlaylistDialog(song: Song) {
         val allPlaylists = playlistManager.getAllPlaylists()
-
         val playlistNames = allPlaylists.map { it.name }.toMutableList()
         playlistNames.add("Create new playlist...")
-
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_playlist, null)
         val playlistListView = dialogView.findViewById<ListView>(R.id.playlistListView)
         val newPlaylistEditText = dialogView.findViewById<EditText>(R.id.newPlaylistEditText)
-
-        // Create adapter with custom layout for highlighting
         val adapter = ArrayAdapter(this, R.layout.dialog_playlist_item, playlistNames)
         playlistListView.adapter = adapter
         playlistListView.choiceMode = ListView.CHOICE_MODE_SINGLE
-
         var selectedPlaylistId = -1
-        var selectedPosition = -1
-
         playlistListView.setOnItemClickListener { _, _, pos, _ ->
-            // Update the selected position for highlighting
-            selectedPosition = pos
-
             if (pos == allPlaylists.size) {
-                // "Create new playlist..." selected
                 newPlaylistEditText.visibility = View.VISIBLE
                 newPlaylistEditText.requestFocus()
                 selectedPlaylistId = -1
             } else {
-                // Existing playlist selected
                 selectedPlaylistId = allPlaylists[pos].id
                 newPlaylistEditText.visibility = View.GONE
             }
-
-            // Force update of views to show selection
             adapter.notifyDataSetChanged()
         }
-
         AlertDialog.Builder(this)
             .setTitle("Add to Playlist")
             .setView(dialogView)
             .setPositiveButton("Add") { _, _ ->
                 if (selectedPlaylistId != -1) {
-                    // Add to existing playlist
                     playlistManager.addSongToPlaylist(selectedPlaylistId, song.uri, song.title)
-                    val playlist = playlistManager.getPlaylist(selectedPlaylistId)
-                    Toast.makeText(this, "Added to playlist: ${playlist?.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Added to: ${playlistManager.getPlaylist(selectedPlaylistId)?.name}", Toast.LENGTH_SHORT).show()
                 } else if (newPlaylistEditText.text.toString().isNotBlank()) {
-                    // Create new playlist and add song
-                    val playlistName = newPlaylistEditText.text.toString()
-                    val newPlaylist = playlistManager.createPlaylist(playlistName)
+                    val name = newPlaylistEditText.text.toString()
+                    val newPlaylist = playlistManager.createPlaylist(name)
                     playlistManager.addSongToPlaylist(newPlaylist.id, song.uri, song.title)
-                    Toast.makeText(this, "Added to new playlist: $playlistName", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Added to new playlist: $name", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -430,35 +356,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playSongOnRepeat(position: Int) {
-        // Play the song
         playSong(position)
-
-        // Enable repeat one
-        val intent = Intent(this, MusicService::class.java).apply {
+        startService(Intent(this, MusicService::class.java).apply {
             action = MusicService.ACTION_REPEAT_ONE
-        }
-        startService(intent)
-
+        })
         Toast.makeText(this, "Playing on repeat", Toast.LENGTH_SHORT).show()
     }
 
     private fun openFullPlayer() {
-        // We need to get current state from service
-        val intent = Intent(this, MusicService::class.java).apply {
+        startService(Intent(this, MusicService::class.java).apply {
             action = MusicService.ACTION_GET_STATE
-        }
-        startService(intent)
-
-        // The service will broadcast the state, and we can open player with that info
-        // For now, open with current song list (might be from playlist)
-        val playerIntent = Intent(this, PlayerActivity::class.java).apply {
+        })
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
             putParcelableArrayListExtra(MusicService.EXTRA_SONG_LIST, ArrayList(songList))
             putExtra(MusicService.EXTRA_SONG_INDEX, currentSongIndex)
-            // Check if the current icon is pause (meaning it's playing)
             val isPlaying = btnPlayPause.drawable?.constantState ==
                     ContextCompat.getDrawable(this@MainActivity, android.R.drawable.ic_media_pause)?.constantState
             putExtra(MusicService.EXTRA_IS_PLAYING, isPlaying)
-        }
-        startActivity(playerIntent)
+        })
     }
 }
